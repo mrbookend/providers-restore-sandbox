@@ -20,6 +20,12 @@ try:
 except Exception:
     pass
 # ---- end dialect registration ----
+import os
+import streamlit as st
+
+if "USE_SECRETS" in st.secrets or True:
+    for k, v in st.secrets.items():
+        os.environ.setdefault(str(k), str(v))
 
 
 # -----------------------------

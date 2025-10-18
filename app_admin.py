@@ -42,6 +42,7 @@ from datetime import datetime, timezone
 from typing import Any, Iterable
 from urllib.parse import urlparse, quote
 
+
 # ---- Third-party ----
 import pandas as pd
 import sqlalchemy as sa

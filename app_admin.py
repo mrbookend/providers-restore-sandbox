@@ -57,6 +57,14 @@ st.caption(
     f"sqlalchemy: {sa.__version__} | "
     f"sqlalchemy-libsql: {sa_libsql_ver}"
 )
+# ---- Session-state safety defaults (defensive) ----
+for _k, _v in {
+    "q": "",
+    "_prev_q": "",
+    "edit_vendor_id": None,
+}.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
 
 # ---- Adopt Streamlit secrets into env (defensive) ----
 try:

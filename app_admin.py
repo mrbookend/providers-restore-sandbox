@@ -6,40 +6,38 @@ import re
 import hmac
 import time
 import uuid
-from datetime import datetime
-from typing import List, Tuple, Dict
+import html
+import json
+import textwrap
+import sys
+from datetime import datetime, timedelta, timezone
+from typing import List, Tuple, Dict, Optional
 
 import pandas as pd
+
 # ---- Page config MUST be the first Streamlit command ----
 import streamlit as st
 st.set_page_config(
-    page_title="HCR Providers — Admin",  # use a static default title here
+    page_title="HCR Providers — Admin",
     page_icon="🛠️",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
-# (Safe to import anything else after this)
-import os, re, time, sys, html, json, textwrap
-from datetime import datetime, timedelta, timezone
-from typing import Dict, List, Optional, Tuple
-
-# ---- register libsql dialect (must be AFTER "import streamlit as st") ----
-try:
-    import sqlalchemy_libsql  # ensures 'sqlite+libsql' dialect is registered
-except Exception:
-    pass
-# ---- end dialect registration ----
-import os
-import streamlit as st
-import sys, streamlit as st
+# ---- SQLAlchemy + libsql imports (safe after page_config) ----
 import sqlalchemy as sa
+from sqlalchemy import create_engine, text as sql_text
+from sqlalchemy.engine import Engine
+
+# Register libsql dialect if available (non-fatal if missing for non-turso)
 try:
     import sqlalchemy_libsql as sa_libsql
-    sa_libsql_ver = getattr(sa_libsql, "__version__", "unknown")
+    sa_libsql_ver = getattr(sa_libsql, "__version__", "not-installed")
 except Exception:
+    sa_libsql = None
     sa_libsql_ver = "not-installed"
 
+# ---- Optional: dependency banner (OK after page_config) ----
 st.caption(
     "Deps — "
     f"py: {sys.version.split()[0]} | "
@@ -48,10 +46,12 @@ st.caption(
     f"sqlalchemy-libsql: {sa_libsql_ver}"
 )
 
-if "USE_SECRETS" in st.secrets or True:
+# ---- Adopt Streamlit secrets into env (defensive) ----
+try:
     for k, v in st.secrets.items():
         os.environ.setdefault(str(k), str(v))
-
+except Exception:
+    pass
 
 # -----------------------------
 # Helpers
@@ -70,7 +70,6 @@ def _get_secret(name: str, default: str | None = None) -> str | None:
         pass
     return os.getenv(name, default)
 
-# Deterministic resolution (secrets → env → code default)
 def _resolve_bool(name: str, code_default: bool) -> bool:
     v = _get_secret(name, None)
     return _as_bool(v, default=code_default)
@@ -82,7 +81,6 @@ def _resolve_str(name: str, code_default: str | None) -> str | None:
 def _ct_equals(a: str, b: str) -> bool:
     """Constant-time string compare for secrets."""
     return hmac.compare_digest((a or ""), (b or ""))
-
 
 # -----------------------------
 # Hrana/libSQL transient error retry

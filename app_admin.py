@@ -11,14 +11,6 @@ import json
 import textwrap
 import sys
 from datetime import datetime, timedelta, timezone
-# ---- Session-state safety defaults (defensive) ----
-for _k, _v in {
-    "q": "",
-    "_prev_q": "",
-    "edit_vendor_id": None,
-}.items():
-    if _k not in st.session_state:
-        st.session_state[_k] = _v
 
 from typing import List, Tuple, Dict, Optional
 

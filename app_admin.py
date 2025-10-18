@@ -690,18 +690,36 @@ _tabs = st.tabs(
         "Debug",
     ]
 )
+# ---- Safe search-blob builder (works across pandas 2.1/2.2/2.3) ----
+def _safe_search_blob(df: pd.DataFrame, columns: list[str]) -> pd.Series:
+    use = [c for c in columns if c in df.columns]
+    if not use:
+        return pd.Series([""] * len(df), index=df.index, dtype="object")
 
-# ---------- Browse
-with _tabs[0]:
-    df = load_df(engine)
+    tmp = (
+        df[use]
+        .astype("string")                   # normalize dtype
+        .fillna("")                         # NaNs -> ""
+        .replace({"<NA>": "", "None": "", "nan": ""})
+    )
+    # Join row values with spaces and lowercase
+    return tmp.apply(lambda row: " ".join(v for v in row if v), axis=1).str.lower()
 
     # --- Build a lowercase search blob once (guarded) ---
     if "_blob" not in df.columns:
-        parts = [
-            df.get(c, pd.Series("", index=df.index)).astype(str)
-            for c in ["business_name", "category", "service", "contact_name", "phone", "address", "website", "notes", "keywords"]
+        _blob_cols = [
+            "business_name",
+            "category",
+            "service",
+            "contact_name",
+            "phone",
+            "address",
+            "website",
+            "notes",
+            "keywords",
+            "computed_keywords",  # include if present
         ]
-        df["_blob"] = pd.concat(parts, axis=1).agg(" ".join, axis=1).str.lower()
+        df["_blob"] = _safe_search_blob(df, _blob_cols)
 
     # --- Search input at 25% width (table remains full width) ---
     left, right = st.columns([1, 3])  # 25% / 75% split for this row only

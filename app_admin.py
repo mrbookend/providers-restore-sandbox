@@ -783,6 +783,8 @@ if "_blob" not in df.columns:
 vdf = df
 if qq:
     vdf = df[df["_blob"].str.contains(qq, na=False)]
+_render = None
+
 # ==== BEGIN: Browse render (safe) ====
 MAX_ROWS = 1000
 if vdf is None or vdf.empty:
@@ -794,19 +796,18 @@ else:
         st.caption(f"Browse — showing {len(_render)}/{len(vdf)} (cap {MAX_ROWS}); total df: {len(df)}")
     st.dataframe(_render, use_container_width=True)
 # ==== END: Browse render (safe) ====
-# Optional: CSV download of the currently rendered subset (_render)
-try:
-    ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
-    st.download_button(
-        "Download filtered view (CSV)",
-        data=_render.to_csv(index=False).encode("utf-8"),
-        file_name=f"providers_{ts}.csv",
-        mime="text/csv",
-    )
-except Exception:
-    pass
-
-    
+    # Optional: CSV download of the currently rendered subset (_render)
+    try:
+        ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+        st.download_button(
+            "Download filtered view (CSV)",
+            data=_render.to_csv(index=False).encode("utf-8"),
+            file_name=f"providers_{ts}.csv",
+            mime="text/csv",
+        )
+    except Exception:
+        # _render only exists when vdf is non-empty; safe to ignore if not defined
+        pass
 
 # ---------- Add/Edit/Delete Vendor
 with _tabs[1]:

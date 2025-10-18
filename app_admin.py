@@ -22,6 +22,21 @@ except Exception:
 # ---- end dialect registration ----
 import os
 import streamlit as st
+import sys, streamlit as st
+import sqlalchemy as sa
+try:
+    import sqlalchemy_libsql as sa_libsql
+    sa_libsql_ver = getattr(sa_libsql, "__version__", "unknown")
+except Exception:
+    sa_libsql_ver = "not-installed"
+
+st.caption(
+    "Deps — "
+    f"py: {sys.version.split()[0]} | "
+    f"streamlit: {st.__version__} | "
+    f"sqlalchemy: {sa.__version__} | "
+    f"sqlalchemy-libsql: {sa_libsql_ver}"
+)
 
 if "USE_SECRETS" in st.secrets or True:
     for k, v in st.secrets.items():

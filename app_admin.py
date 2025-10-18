@@ -21,12 +21,16 @@ WARNING: Do NOT run Schema Bootstrap on production unless you intend to create t
 
 # ---- Streamlit page config MUST be first ----
 import streamlit as st
-st.set_page_config(
+try:
+    st.set_page_config(
     page_title="HCR Providers — Admin",
     page_icon="🛠️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
+except Exception:
+    # Ignore if already set elsewhere (Streamlit 1.41 strictness)
+    pass
 # ---- No other st.* calls above this line ----
 
 # ---- Stdlib ----
@@ -58,16 +62,6 @@ try:
 except Exception:  # pragma: no cover
     sa_libsql = None
     SA_LIBSQL_VER = "not installed"
-
-# ---- Optional: dependency banner (safe AFTER page_config) ----
-if os.getenv("ADMIN_SHOW_STATUS", "0").strip() == "1":
-    st.caption(
-        "Deps — "
-        f"py: {sys.version.split()[0]} | "
-        f"streamlit: {st.__version__} | "
-        f"sqlalchemy: {sa.__version__} | "
-        f"sqlalchemy-libsql: {SA_LIBSQL_VER}"
-    )
 
 # =============================
 # Configuration / Constants

@@ -766,8 +766,12 @@ def _safe_search_blob(df: pd.DataFrame, columns: list[str]) -> pd.Series:
         "notes",
         "keywords",
     ]
-
     vdf = filtered[view_cols].rename(columns={"phone_fmt": "phone"})
+
+    # ---- Early-out if we're in Edit mode (hide browse while editing) ----
+    if st.session_state.get("edit_vendor_id"):
+        st.info("Editing a provider — browse hidden. Click “Cancel Edit” to return.")
+        st.stop()
 
     # Read-only table with clickable website links
     st.dataframe(
@@ -781,6 +785,7 @@ def _safe_search_blob(df: pd.DataFrame, columns: list[str]) -> pd.Series:
             "keywords": st.column_config.TextColumn(width=300),
         },
     )
+
 
     ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
     st.download_button(

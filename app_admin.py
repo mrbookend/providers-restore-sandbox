@@ -766,15 +766,16 @@ def _safe_search_blob(df: pd.DataFrame, columns: list[str]) -> pd.Series:
         "notes",
         "keywords",
     ]
-    vdf = filtered[view_cols].rename(columns={"phone_fmt": "phone"})
+        vdf = filtered[view_cols].rename(columns={"phone_fmt": "phone"})
 
-    # ---- Early-out if we're in Edit mode (hide browse while editing) ----
-    if st.session_state.get("edit_vendor_id"):
-        st.info("Editing a provider — browse hidden. Click “Cancel Edit” to return.")
-        st.stop()
+    # ---- Exit Edit mode on Browse so the table can render ----
+    if st.session_state.get("edit_vendor_id") is not None:
+        st.info("Exiting edit mode to show the browse table.")
+        st.session_state["edit_vendor_id"] = None
 
     # Read-only table with clickable website links
     st.dataframe(
+
         vdf,
         use_container_width=True,
         hide_index=True,

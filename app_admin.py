@@ -875,18 +875,17 @@ def _safe_search_blob(df: pd.DataFrame, columns: list[str]) -> pd.Series:
 # ====== END FUNCTION ======
 
 with _tabs[0]:
-    # --- Load data for Browse Vendors tab ---
-    df = load_df(engine)
+    st.subheader("Browse Vendors")
 
-    # --- Build a lowercase search blob once (guarded) ---
-    if "_blob" not in df.columns:
-        _blob_cols = [
-            "business_name", "category", "service", "contact_name", "phone",
-            "address", "website", "notes", "keywords", "computed_keywords"
-        ]
-        df["_blob"] = _safe_search_blob(df, _blob_cols)
+    # Ensure schema (idempotent) and prep DSN for cached queries
+    ensure_schema(engine)
+    engine_dsn = _dsn_for_cache()
 
-    # --- Search input at 25% width (table remains full width) ---
+    # ---- Session-state for search & paging ----
+    st.session_state.setdefault("page", 0)
+    st.session_state.setdefault("_prev_q", "")
+
+    # ---- Search row ----
     left, right = st.columns([1, 3])
     with left:
         st.text_input(
@@ -896,65 +895,64 @@ with _tabs[0]:
             key="q",
         )
 
-    # ---- Resolve current query from session ----
     q = (st.session_state.get("q") or "").strip()
+    if q != (st.session_state.get("_prev_q") or ""):
+        st.session_state["page"] = 0
+        st.session_state["_prev_q"] = q
 
-    # ---- Reset any edit selection when search changes ----
-    _prev_q = st.session_state.get("_prev_q", None)
-    if q != (_prev_q or ""):
-        st.session_state["edit_vendor_id"] = None
-    st.session_state["_prev_q"] = q
+    # Prev / Next controls
+    cL, cM, cR = st.columns([1, 2, 1])
+    with cL:
+        if st.button("◀ Prev", disabled=(st.session_state["page"] <= 0)):
+            st.session_state["page"] = max(0, st.session_state["page"] - 1)
+    with cR:
+        if st.button("Next ▶"):
+            st.session_state["page"] = st.session_state["page"] + 1
 
-    # ---- Keep ?q synchronized with session state (guarded; avoids rerun loops) ----
-    try:
-        if hasattr(st, "query_params"):
-            existing_q = ""
-            try:
-                existing_q = st.query_params.get("q") or ""
-            except Exception:
-                existing_q = ""
-            if existing_q != q:
-                st.query_params["q"] = q
-    except Exception:
-        # Never let param sync crash the app
-        pass
+    # FTS detection
+    use_fts = _supports_fts(engine)
 
-    # ---- Build filtered view (fast substring over prebuilt _blob) ----
-    qq = q.lower()
-    if "_blob" not in df.columns:
-        # Fallback: build a minimal blob on the fly (slower)
-        cols = [c for c in ["category", "service", "business_name", "notes", "keywords"] if c in df.columns]
-        df["_blob"] = df[cols].astype(str).agg(" ".join, axis=1).str.lower()
+    # Guard tiny queries to avoid needless scans
+    q_eff = q if len(q) >= MIN_Q_LEN else ""
 
-    vdf = df
-    if qq:
-        vdf = df[df["_blob"].str.contains(qq, na=False)]
-    _render = None
+    # Count and page (cached)
+    t0 = time.perf_counter()
+    total = query_count_cached(engine_dsn, q_eff, use_fts, version="browse-v1")
+    t1 = time.perf_counter()
+    vdf = query_page_cached(
+        engine_dsn,
+        q_eff,
+        use_fts,
+        version="browse-v1",
+        page=int(st.session_state["page"]),
+        page_size=PAGE_SIZE,
+    )
+    t2 = time.perf_counter()
 
-    # ==== BEGIN: Browse render (safe) ====
-    MAX_ROWS = 1000
+    st.caption(f"Results: {total:,} | Page {int(st.session_state['page'])+1} · {PAGE_SIZE} per page "
+               f"| COUNT {t1-t0:0.3f}s DATA {t2-t1:0.3f}s")
+
+    # Render
     if vdf is None or vdf.empty:
         st.info("No matching providers. Tip: try fewer words.")
+        _render = None
     else:
-        _render = vdf.head(MAX_ROWS).copy()
-        # Optional: quiet debug breadcrumb (gated)
+        _render = vdf.head(MAX_RENDER).copy()
         if os.getenv("ADMIN_SHOW_DEBUG", "").strip() == "1" or st.session_state.get("show_debug"):
-            st.caption(f"Browse — showing {len(_render)}/{len(vdf)} (cap {MAX_ROWS}); total df: {len(df)}")
+            st.caption(f"Browse — showing {len(_render)} (cap {MAX_RENDER}); page={int(st.session_state['page'])}, q='{q}'")
         st.dataframe(_render, use_container_width=True)
-    # ==== END: Browse render (safe) ====
 
-    # Optional: CSV download of the currently rendered subset (_render)
+    # CSV download for the current page
     try:
         if _render is not None and not _render.empty:
             ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
             st.download_button(
-                "Download filtered view (CSV)",
+                "Download current page (CSV)",
                 data=_render.to_csv(index=False).encode("utf-8"),
-                file_name=f"providers_{ts}.csv",
+                file_name=f"providers_page_{ts}.csv",
                 mime="text/csv",
             )
     except Exception:
-        # _render only exists when vdf is non-empty; safe to ignore if not defined
         pass
 
 # ---------- Add/Edit/Delete Vendor

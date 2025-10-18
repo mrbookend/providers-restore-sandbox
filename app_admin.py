@@ -650,6 +650,68 @@ def usage_count(engine: Engine, col: str, name: str) -> int:
     with engine.begin() as conn:
         cnt = conn.execute(sql_text(f"SELECT COUNT(*) FROM vendors WHERE {col} = :n"), {"n": name}).scalar()
     return int(cnt or 0)
+# ==== BEGIN: Cached SQL query layer for Browse ====
+def _supports_fts(engine: Engine) -> bool:
+    try:
+        with engine.connect() as cx:
+            cx.execute(sql_text("SELECT count(*) FROM vendors_fts LIMIT 1"))
+        return True
+    except Exception:
+        return False
+
+def _count_sql(q: str, use_fts: bool) -> str:
+    if use_fts and len(q) >= MIN_Q_LEN and q:
+        return """
+            SELECT COUNT(*) FROM vendors v
+            JOIN vendors_fts f ON f.rowid = v.id
+            WHERE vendors_fts MATCH :q
+        """
+    return """
+        SELECT COUNT(*) FROM vendors
+        WHERE (:q = '')
+           OR (LOWER(business_name)     LIKE '%' || :q || '%')
+           OR (LOWER(computed_keywords) LIKE '%' || :q || '%')
+           OR (LOWER(keywords)          LIKE '%' || :q || '%')
+    """
+
+def _page_sql(q: str, use_fts: bool) -> str:
+    if use_fts and len(q) >= MIN_Q_LEN and q:
+        return """
+            SELECT v.* FROM vendors v
+            JOIN vendors_fts f ON f.rowid = v.id
+            WHERE vendors_fts MATCH :q
+            ORDER BY v.business_name
+            LIMIT :limit OFFSET :offset
+        """
+    return """
+        SELECT * FROM vendors
+        WHERE (:q = '')
+           OR (LOWER(business_name)     LIKE '%' || :q || '%')
+           OR (LOWER(computed_keywords) LIKE '%' || :q || '%')
+           OR (LOWER(keywords)          LIKE '%' || :q || '%')
+        ORDER BY business_name
+        LIMIT :limit OFFSET :offset
+    """
+
+@st.cache_data(show_spinner=False)
+def query_count_cached(engine_dsn: str, q: str, use_fts: bool, version: str) -> int:
+    eng = create_engine(engine_dsn, pool_pre_ping=True, pool_recycle=300)
+    with eng.connect() as cx:
+        res = cx.execute(sql_text(_count_sql(q, use_fts)), {"q": (q or "").lower()})
+        return int(res.scalar() or 0)
+
+@st.cache_data(show_spinner=False)
+def query_page_cached(engine_dsn: str, q: str, use_fts: bool, version: str,
+                      page: int, page_size: int) -> pd.DataFrame:
+    eng = create_engine(engine_dsn, pool_pre_ping=True, pool_recycle=300)
+    with eng.connect() as cx:
+        offset = max(0, int(page)) * max(1, int(page_size))
+        return pd.read_sql(
+            sql_text(_page_sql(q, use_fts)),
+            cx,
+            params={"q": (q or "").lower(), "limit": int(page_size), "offset": int(offset)},
+        )
+# ==== END: Cached SQL query layer for Browse ====
 
 # -----------------------------
 # CSV Restore helpers (append-only, ID-checked)

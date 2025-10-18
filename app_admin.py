@@ -740,7 +740,32 @@ with _tabs[0]:
         )
 
     # Fast local filter using the prebuilt blob (no regex)
-    qq = (st.session_state.get("q") or "").strip().lower()
+# ---- Resolve current query from session ----
+q = (st.session_state.get("q") or "").strip()
+
+# ---- Reset any edit selection when search changes ----
+_prev_q = st.session_state.get("_prev_q", None)
+if q != (_prev_q or ""):
+    st.session_state["edit_vendor_id"] = None
+st.session_state["_prev_q"] = q
+
+# ---- Keep ?q synchronized with session state (guarded; avoids rerun loops) ----
+try:
+    if hasattr(st, "query_params"):
+        existing_q = ""
+        try:
+            existing_q = st.query_params.get("q") or ""
+        except Exception:
+            existing_q = ""
+        if existing_q != q:
+            st.query_params["q"] = q
+except Exception:
+    # Never let param sync crash the app
+    pass
+
+# ---- Lowercased form for filtering ----
+qq = q.lower()
+
     filtered = df[df["_blob"].str.contains(qq, regex=False, na=False)] if qq else df
 
     view_cols = [

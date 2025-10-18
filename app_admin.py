@@ -742,6 +742,11 @@ def _safe_search_blob(df: pd.DataFrame, columns: list[str]) -> pd.Series:
             key="q",
         )
 
+    # ---- Early-out if we're in Edit mode (hide browse while editing) ----
+    if st.session_state.get("edit_vendor_id"):
+        st.info("Editing a provider — browse hidden. Click “Cancel Edit” to return.")
+        st.stop()
+
     # Fast local filter using the prebuilt blob (no regex)
     qq = (st.session_state.get("q") or "").strip().lower()
     if qq:

@@ -717,66 +717,20 @@ def _safe_search_blob(df: pd.DataFrame, columns: list[str]) -> pd.Series:
     return tmp.apply(lambda row: " ".join(v for v in row if v), axis=1).str.lower()
 # ====== END FUNCTION ======
 
-# --- Load data for Browse Vendors tab ---
-df = load_df(engine)
+with _tabs[0]:
+    # --- Load data for Browse Vendors tab ---
+    df = load_df(engine)
 
-# --- Build a lowercase search blob once (guarded) ---
-if "_blob" not in df.columns:
-    _blob_cols = [
-        "business_name", "category", "service", "contact_name", "phone",
-        "address", "website", "notes", "keywords", "computed_keywords"
-    ]
-    df["_blob"] = _safe_search_blob(df, _blob_cols)
-
-# --- Search input at 25% width (table remains full width) ---
-left, right = st.columns([1, 3])
-with left:
-    q = st.text_input(
-        "Search",
-        placeholder="Search providers… (press Enter)",
-        label_visibility="collapsed",
-        key="q",
-    )
-
-
-# Fast local filter using the prebuilt blob (no regex)
-qq = (st.session_state.get("q") or "").strip().lower()
-filtered = df[df["_blob"].str.contains(qq, regex=False, na=False)] if qq else df
-
-view_cols = [
-    "id", "category", "service", "business_name", "contact_name",
-    "phone_fmt", "address", "website", "notes", "keywords",
-]
-vdf = filtered[view_cols].rename(columns={"phone_fmt": "phone"})
-
-# ---- Exit Edit mode on Browse so the table can render ----
-if st.session_state.get("edit_vendor_id") is not None:
-    st.info("Exiting edit mode to show the browse table.")
-    st.session_state["edit_vendor_id"] = None
-
-# (temp) quick sanity: expect df>0 and vdf>0 when search empty
-st.caption(
-    f"Browse debug — df rows: {len(df)}; filtered rows: {len(vdf)}; "
-    f"edit_vendor_id: {st.session_state.get('edit_vendor_id')}"
-)
-
-# Read-only table with clickable website links
-st.dataframe(
-    vdf,
-    use_container_width=True,
-    hide_index=True,
-    column_config={
-        "business_name": st.column_config.TextColumn("Provider"),
-        "website": st.column_config.LinkColumn("website"),
-        "notes": st.column_config.TextColumn(width=420),
-        "keywords": st.column_config.TextColumn(width=300),
-    },
-)
-
+    # --- Build a lowercase search blob once (guarded) ---
+    if "_blob" not in df.columns:
+        _blob_cols = [
+            "business_name", "category", "service", "contact_name", "phone",
+            "address", "website", "notes", "keywords", "computed_keywords"
+        ]
         df["_blob"] = _safe_search_blob(df, _blob_cols)
 
     # --- Search input at 25% width (table remains full width) ---
-    left, right = st.columns([1, 3])  # 25% / 75% split for this row only
+    left, right = st.columns([1, 3])
     with left:
         q = st.text_input(
             "Search",
@@ -785,31 +739,15 @@ st.dataframe(
             key="q",
         )
 
-    # ---- Early-out if we're in Edit mode (hide browse while editing) ----
-    if st.session_state.get("edit_vendor_id"):
-        st.info("Editing a provider — browse hidden. Click “Cancel Edit” to return.")
-        st.stop()
-
     # Fast local filter using the prebuilt blob (no regex)
     qq = (st.session_state.get("q") or "").strip().lower()
-    if qq:
-        filtered = df[df["_blob"].str.contains(qq, regex=False, na=False)]
-    else:
-        filtered = df
+    filtered = df[df["_blob"].str.contains(qq, regex=False, na=False)] if qq else df
 
     view_cols = [
-        "id",
-        "category",
-        "service",
-        "business_name",
-        "contact_name",
-        "phone_fmt",
-        "address",
-        "website",
-        "notes",
-        "keywords",
+        "id", "category", "service", "business_name", "contact_name",
+        "phone_fmt", "address", "website", "notes", "keywords",
     ]
-     vdf = filtered[view_cols].rename(columns={"phone_fmt": "phone"})
+    vdf = filtered[view_cols].rename(columns={"phone_fmt": "phone"})
 
     # ---- Exit Edit mode on Browse so the table can render ----
     if st.session_state.get("edit_vendor_id") is not None:
@@ -817,7 +755,10 @@ st.dataframe(
         st.session_state["edit_vendor_id"] = None
 
     # (temp) quick sanity: expect df>0 and vdf>0 when search empty
-    st.caption(f"Browse debug — df rows: {len(df)}; filtered rows: {len(vdf)}; edit_vendor_id: {st.session_state.get('edit_vendor_id')}")
+    st.caption(
+        f"Browse debug — df rows: {len(df)}; filtered rows: {len(vdf)}; "
+        f"edit_vendor_id: {st.session_state.get('edit_vendor_id')}"
+    )
 
     # Read-only table with clickable website links
     st.dataframe(
@@ -832,6 +773,7 @@ st.dataframe(
         },
     )
 
+    # Download filtered view (optional; keep if you had it before)
     ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
     st.download_button(
         "Download filtered view (CSV)",

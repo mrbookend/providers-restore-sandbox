@@ -765,6 +765,15 @@ except Exception:
 
 # ---- Lowercased form for filtering ----
 qq = q.lower()
+# ---- Build filtered view (fast substring over prebuilt _blob) ----
+if "_blob" not in df.columns:
+    # Fallback: build a minimal blob on the fly (slower)
+    cols = [c for c in ["category", "service", "business_name", "notes", "keywords"] if c in df.columns]
+    df["_blob"] = df[cols].astype(str).agg(" ".join, axis=1).str.lower()
+
+vdf = df
+if qq:
+    vdf = df[df["_blob"].str.contains(qq, na=False)]
 
     filtered = df[df["_blob"].str.contains(qq, regex=False, na=False)] if qq else df
 

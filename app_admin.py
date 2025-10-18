@@ -495,10 +495,42 @@ def ensure_schema(engine: Engine) -> None:
         "CREATE INDEX IF NOT EXISTS idx_vendors_svc_lower ON vendors(lower(service))",
         "CREATE INDEX IF NOT EXISTS idx_vendors_phone ON vendors(phone)",
     ]
-    with engine.begin() as conn:
-        for s in stmts:
-            conn.execute(sql_text(s))
+with engine.begin() as conn:
+    for s in stmts:
+        conn.execute(sql_text(s))
 
+    # ---- CKW columns (idempotent ALTERs) ----
+    try:
+        cols = {r[1] for r in conn.execute(sql_text("PRAGMA table_info(vendors)")).fetchall()}
+        alters = []
+        if "computed_keywords" not in cols:
+            alters.append("ALTER TABLE vendors ADD COLUMN computed_keywords TEXT")
+        if "ckw_locked" not in cols:
+            alters.append("ALTER TABLE vendors ADD COLUMN ckw_locked INTEGER DEFAULT 0")
+        if "ckw_version" not in cols:
+            alters.append("ALTER TABLE vendors ADD COLUMN ckw_version TEXT")
+        for stmt in alters:
+            conn.execute(sql_text(stmt))
+    except Exception:
+        # Non-fatal: if the table is new those columns will exist after first boot;
+        # PRAGMA behavior can differ across drivers. Ignore quietly.
+        pass
+    # Normalize existing rows so indexes/filters behave predictably
+    conn.execute(sql_text("UPDATE vendors SET ckw_locked = IFNULL(ckw_locked, 0)"))
+    conn.execute(sql_text("UPDATE vendors SET ckw_version = IFNULL(ckw_version, '')"))
+
+    # ---- CKW indexes (match prod) ----
+    conn.execute(sql_text(
+        "CREATE INDEX IF NOT EXISTS idx_vendors_ckw ON vendors(computed_keywords)"
+    ))
+    # A compact “status” index that helps maintenance probes
+    conn.execute(sql_text(
+        "CREATE INDEX IF NOT EXISTS idx_vendors_ckw_status ON vendors(IFNULL(ckw_locked,0), ckw_version)"
+    ))
+    # Simple service index to mirror prod
+    conn.execute(sql_text(
+        "CREATE INDEX IF NOT EXISTS idx_vendors_svc ON vendors(service)"
+    ))
 
 def _normalize_phone(val: str | None) -> str:
     if not val:

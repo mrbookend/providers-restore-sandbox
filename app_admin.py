@@ -555,6 +555,45 @@ def ensure_schema(engine: Engine) -> None:
         conn.execute(sql_text(
             "CREATE INDEX IF NOT EXISTS idx_vendors_svc ON vendors(service)"
         ))
+        # ---- Additional helpful indexes (perf) ----
+        conn.execute(sql_text(
+            "CREATE INDEX IF NOT EXISTS idx_vendors_updated_at ON vendors(updated_at)"
+        ))
+        conn.execute(sql_text(
+            "CREATE INDEX IF NOT EXISTS idx_vendors_bus_lower2 ON vendors(lower(business_name))"
+        ))
+
+        # ---- Optional FTS5 virtual table + triggers (idempotent; skip if driver lacks FTS) ----
+        try:
+            conn.execute(sql_text("""
+                CREATE VIRTUAL TABLE IF NOT EXISTS vendors_fts USING fts5(
+                    business_name, category, service, computed_keywords, keywords,
+                    content='vendors', content_rowid='id'
+                );
+            """))
+            conn.execute(sql_text("""
+                CREATE TRIGGER IF NOT EXISTS vendors_ai AFTER INSERT ON vendors BEGIN
+                    INSERT INTO vendors_fts(rowid, business_name, category, service, computed_keywords, keywords)
+                    VALUES (new.id, new.business_name, new.category, new.service, new.computed_keywords, new.keywords);
+                END;
+            """))
+            conn.execute(sql_text("""
+                CREATE TRIGGER IF NOT EXISTS vendors_ad AFTER DELETE ON vendors BEGIN
+                    INSERT INTO vendors_fts(vendors_fts, rowid, business_name, category, service, computed_keywords, keywords)
+                    VALUES('delete', old.id, old.business_name, old.category, old.service, old.computed_keywords, old.keywords);
+                END;
+            """))
+            conn.execute(sql_text("""
+                CREATE TRIGGER IF NOT EXISTS vendors_au AFTER UPDATE ON vendors BEGIN
+                    INSERT INTO vendors_fts(vendors_fts, rowid, business_name, category, service, computed_keywords, keywords)
+                    VALUES('delete', old.id, old.business_name, old.category, old.service, old.computed_keywords, old.keywords);
+                    INSERT INTO vendors_fts(rowid, business_name, category, service, computed_keywords, keywords)
+                    VALUES (new.id, new.business_name, new.category, new.service, new.computed_keywords, new.keywords);
+                END;
+            """))
+        except Exception:
+            # If FTS5 is not available (driver/platform), skip quietly
+            pass
 
 def _normalize_phone(val: str | None) -> str:
     if not val:

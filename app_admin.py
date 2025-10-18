@@ -11,6 +11,15 @@ import json
 import textwrap
 import sys
 from datetime import datetime, timedelta, timezone
+# ---- Session-state safety defaults (defensive) ----
+for _k, _v in {
+    "q": "",
+    "_prev_q": "",
+    "edit_vendor_id": None,
+}.items():
+    if _k not in st.session_state:
+        st.session_state[_k] = _v
+
 from typing import List, Tuple, Dict, Optional
 
 import pandas as pd
@@ -774,6 +783,17 @@ if "_blob" not in df.columns:
 vdf = df
 if qq:
     vdf = df[df["_blob"].str.contains(qq, na=False)]
+# ==== BEGIN: Browse render (safe) ====
+MAX_ROWS = 1000
+if vdf is None or vdf.empty:
+    st.info("No matching providers. Tip: try fewer words.")
+else:
+    _render = vdf.head(MAX_ROWS).copy()
+    # Optional: quiet debug breadcrumb (gated)
+    if os.getenv("ADMIN_SHOW_DEBUG", "").strip() == "1" or st.session_state.get("show_debug"):
+        st.caption(f"Browse — showing {len(_render)}/{len(vdf)} (cap {MAX_ROWS}); total df: {len(df)}")
+    st.dataframe(_render, use_container_width=True)
+# ==== END: Browse render (safe) ====
 
     filtered = df[df["_blob"].str.contains(qq, regex=False, na=False)] if qq else df
 

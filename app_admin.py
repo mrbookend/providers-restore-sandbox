@@ -1,3 +1,4 @@
+# app_admin.py
 # -*- coding: utf-8 -*-
 from __future__ import annotations
 
@@ -6,13 +7,9 @@ import re
 import hmac
 import time
 import uuid
-import html
-import json
-import textwrap
 import sys
-from datetime import datetime, timedelta, timezone
-
-from typing import List, Tuple, Dict, Optional
+from datetime import datetime
+from typing import Any
 
 import pandas as pd
 
@@ -22,7 +19,7 @@ st.set_page_config(
     page_title="HCR Providers — Admin",
     page_icon="🛠️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
 # ---- SQLAlchemy + libsql imports (safe after page_config) ----
@@ -32,11 +29,11 @@ from sqlalchemy.engine import Engine
 
 # Register libsql dialect if available (non-fatal if missing for non-turso)
 try:
-    import sqlalchemy_libsql as sa_libsql
+    import sqlalchemy_libsql as sa_libsql  # type: ignore
 except Exception:
     sa_libsql = None
 
-# Resolve sqlalchemy-libsql version from installed dist (more reliable than module attr)
+# Resolve sqlalchemy-libsql version (more reliable than module attr)
 try:
     from importlib.metadata import version as _pkg_version, PackageNotFoundError
 except Exception:  # very old Pythons only; 3.11 has it
@@ -57,6 +54,7 @@ st.caption(
     f"sqlalchemy: {sa.__version__} | "
     f"sqlalchemy-libsql: {sa_libsql_ver}"
 )
+
 # ---- Session-state safety defaults (defensive) ----
 for _k, _v in {
     "q": "",
@@ -76,7 +74,7 @@ except Exception:
 # -----------------------------
 # Helpers
 # -----------------------------
-def _as_bool(v, default: bool = False) -> bool:
+def _as_bool(v: Any, default: bool = False) -> bool:
     if v is None:
         return default
     return str(v).strip().lower() in ("1", "true", "yes", "on")
@@ -85,7 +83,7 @@ def _get_secret(name: str, default: str | None = None) -> str | None:
     """Prefer Streamlit secrets, fallback to environment, then default."""
     try:
         if name in st.secrets:
-            return st.secrets[name]
+            return st.secrets[name]  # type: ignore[index]
     except Exception:
         pass
     return os.getenv(name, default)
@@ -109,7 +107,7 @@ def _is_hrana_stale_stream_error(err: Exception) -> bool:
     s = str(err).lower()
     return ("hrana" in s and "404" in s and "stream not found" in s) or ("stream not found" in s)
 
-def _exec_with_retry(engine: Engine, sql: str, params: Dict | None = None, *, tries: int = 2):
+def _exec_with_retry(engine: Engine, sql: str, params: dict[str, Any] | None = None, *, tries: int = 2):
     """
     Execute a write (INSERT/UPDATE/DELETE) with a one-time retry on Hrana 'stream not found'.
     Returns the result proxy so you can read .rowcount.
@@ -130,7 +128,7 @@ def _exec_with_retry(engine: Engine, sql: str, params: Dict | None = None, *, tr
                 continue
             raise
 
-def _fetch_with_retry(engine: Engine, sql: str, params: Dict | None = None, *, tries: int = 2) -> pd.DataFrame:
+def _fetch_with_retry(engine: Engine, sql: str, params: dict[str, Any] | None = None, *, tries: int = 2) -> pd.DataFrame:
     """
     Execute a read (SELECT) with a one-time retry on Hrana 'stream not found'.
     """
@@ -151,10 +149,9 @@ def _fetch_with_retry(engine: Engine, sql: str, params: Dict | None = None, *, t
                 continue
             raise
 
-
 # ---------- Form state helpers (Add / Edit / Delete) ----------
 # Add form keys
-ADD_FORM_KEYS = [
+ADD_FORM_KEYS: list[str] = [
     "add_business_name", "add_category", "add_service", "add_contact_name",
     "add_phone", "add_address", "add_website", "add_notes", "add_keywords",
 ]
@@ -180,14 +177,14 @@ def _queue_add_form_reset():
     st.session_state["_pending_add_reset"] = True
 
 # Edit form keys
-EDIT_FORM_KEYS = [
+EDIT_FORM_KEYS: list[str] = [
     "edit_vendor_id", "edit_business_name", "edit_category", "edit_service",
     "edit_contact_name", "edit_phone", "edit_address", "edit_website",
     "edit_notes", "edit_keywords", "edit_row_updated_at", "edit_last_loaded_id",
 ]
 
 def _init_edit_form_defaults():
-    defaults = {
+    defaults: dict[str, Any] = {
         "edit_vendor_id": None,
         "edit_business_name": "",
         "edit_category": "",
@@ -232,7 +229,7 @@ def _queue_edit_form_reset():
     st.session_state["_pending_edit_reset"] = True
 
 # Delete form keys
-DELETE_FORM_KEYS = ["delete_vendor_id"]
+DELETE_FORM_KEYS: list[str] = ["delete_vendor_id"]
 
 def _init_delete_form_defaults():
     st.session_state.setdefault("delete_vendor_id", None)
@@ -310,7 +307,6 @@ def _apply_svc_reset_if_needed():
 def _queue_svc_reset():
     st.session_state["_pending_svc_reset"] = True
 
-
 # -----------------------------
 # Page config & CSS
 # -----------------------------
@@ -331,7 +327,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
 
 # -----------------------------
 # Admin sign-in gate (deterministic toggle)
@@ -363,16 +358,14 @@ else:
                 st.error("Incorrect password.")
         st.stop()
 
-
 # -----------------------------
 # DB helpers
 # -----------------------------
-REQUIRED_VENDOR_COLUMNS: List[str] = ["business_name", "category"]  # service optional
+REQUIRED_VENDOR_COLUMNS: list[str] = ["business_name", "category"]  # service optional
 
-
-def build_engine() -> Tuple[Engine, Dict]:
+def build_engine() -> tuple[Engine, dict[str, Any]]:
     """Prefer Turso/libsql embedded replica; otherwise local sqlite if FORCE_LOCAL=1."""
-    info: Dict = {}
+    info: dict[str, Any] = {}
 
     url = (_resolve_str("TURSO_DATABASE_URL", "") or "").strip()
     token = (_resolve_str("TURSO_AUTH_TOKEN", "") or "").strip()
@@ -454,7 +447,6 @@ def build_engine() -> Tuple[Engine, Dict]:
         st.error("Remote DB unavailable and FORCE_LOCAL is not set. Aborting to protect data.")
         raise
 
-
 def ensure_schema(engine: Engine) -> None:
     stmts = [
         """
@@ -489,48 +481,49 @@ def ensure_schema(engine: Engine) -> None:
         "CREATE INDEX IF NOT EXISTS idx_vendors_cat ON vendors(category)",
         "CREATE INDEX IF NOT EXISTS idx_vendors_bus ON vendors(business_name)",
         "CREATE INDEX IF NOT EXISTS idx_vendors_kw  ON vendors(keywords)",
-        # helpful functional indexes for case-insensitive operations used by UI
         "CREATE INDEX IF NOT EXISTS idx_vendors_bus_lower ON vendors(lower(business_name))",
         "CREATE INDEX IF NOT EXISTS idx_vendors_cat_lower ON vendors(lower(category))",
         "CREATE INDEX IF NOT EXISTS idx_vendors_svc_lower ON vendors(lower(service))",
         "CREATE INDEX IF NOT EXISTS idx_vendors_phone ON vendors(phone)",
     ]
-with engine.begin() as conn:
-    for s in stmts:
-        conn.execute(sql_text(s))
 
-    # ---- CKW columns (idempotent ALTERs) ----
-    try:
-        cols = {r[1] for r in conn.execute(sql_text("PRAGMA table_info(vendors)")).fetchall()}
-        alters = []
-        if "computed_keywords" not in cols:
-            alters.append("ALTER TABLE vendors ADD COLUMN computed_keywords TEXT")
-        if "ckw_locked" not in cols:
-            alters.append("ALTER TABLE vendors ADD COLUMN ckw_locked INTEGER DEFAULT 0")
-        if "ckw_version" not in cols:
-            alters.append("ALTER TABLE vendors ADD COLUMN ckw_version TEXT")
-        for stmt in alters:
-            conn.execute(sql_text(stmt))
-    except Exception:
-        # Non-fatal: if the table is new those columns will exist after first boot;
-        # PRAGMA behavior can differ across drivers. Ignore quietly.
-        pass
-    # Normalize existing rows so indexes/filters behave predictably
-    conn.execute(sql_text("UPDATE vendors SET ckw_locked = IFNULL(ckw_locked, 0)"))
-    conn.execute(sql_text("UPDATE vendors SET ckw_version = IFNULL(ckw_version, '')"))
+    with engine.begin() as conn:
+        for s in stmts:
+            conn.execute(sql_text(s))
 
-    # ---- CKW indexes (match prod) ----
-    conn.execute(sql_text(
-        "CREATE INDEX IF NOT EXISTS idx_vendors_ckw ON vendors(computed_keywords)"
-    ))
-    # A compact “status” index that helps maintenance probes
-    conn.execute(sql_text(
-        "CREATE INDEX IF NOT EXISTS idx_vendors_ckw_status ON vendors(IFNULL(ckw_locked,0), ckw_version)"
-    ))
-    # Simple service index to mirror prod
-    conn.execute(sql_text(
-        "CREATE INDEX IF NOT EXISTS idx_vendors_svc ON vendors(service)"
-    ))
+        # ---- CKW columns (idempotent ALTERs) ----
+        try:
+            cols = {r[1] for r in conn.execute(sql_text("PRAGMA table_info(vendors)")).fetchall()}
+            alters: list[str] = []
+            if "computed_keywords" not in cols:
+                alters.append("ALTER TABLE vendors ADD COLUMN computed_keywords TEXT")
+            if "ckw_locked" not in cols:
+                alters.append("ALTER TABLE vendors ADD COLUMN ckw_locked INTEGER DEFAULT 0")
+            if "ckw_version" not in cols:
+                alters.append("ALTER TABLE vendors ADD COLUMN ckw_version TEXT")
+            for stmt in alters:
+                conn.execute(sql_text(stmt))
+        except Exception:
+            # Non-fatal: if the table is new those columns will exist after first boot;
+            # PRAGMA behavior can differ across drivers. Ignore quietly.
+            pass
+
+        # Normalize existing rows so indexes/filters behave predictably
+        conn.execute(sql_text("UPDATE vendors SET ckw_locked = IFNULL(ckw_locked, 0)"))
+        conn.execute(sql_text("UPDATE vendors SET ckw_version = IFNULL(ckw_version, '')"))
+
+        # ---- CKW indexes (match prod) ----
+        conn.execute(sql_text(
+            "CREATE INDEX IF NOT EXISTS idx_vendors_ckw ON vendors(computed_keywords)"
+        ))
+        # Compact “status” index that helps maintenance probes
+        conn.execute(sql_text(
+            "CREATE INDEX IF NOT EXISTS idx_vendors_ckw_status ON vendors(IFNULL(ckw_locked,0), ckw_version)"
+        ))
+        # Simple service index to mirror prod
+        conn.execute(sql_text(
+            "CREATE INDEX IF NOT EXISTS idx_vendors_svc ON vendors(service)"
+        ))
 
 def _normalize_phone(val: str | None) -> str:
     if not val:
@@ -540,13 +533,11 @@ def _normalize_phone(val: str | None) -> str:
         digits = digits[1:]
     return digits if len(digits) == 10 else digits
 
-
 def _format_phone(val: str | None) -> str:
     s = re.sub(r"\D", "", str(val or ""))
     if len(s) == 10:
         return f"({s[0:3]}) {s[3:6]}-{s[6:10]}"
     return (val or "").strip()
-
 
 def _sanitize_url(url: str | None) -> str:
     if not url:
@@ -555,7 +546,6 @@ def _sanitize_url(url: str | None) -> str:
     if url and not re.match(r"^https?://", url, re.I):
         url = "https://" + url
     return url
-
 
 def load_df(engine: Engine) -> pd.DataFrame:
     with engine.begin() as conn:
@@ -581,18 +571,15 @@ def load_df(engine: Engine) -> pd.DataFrame:
 
     return df
 
-
 def list_names(engine: Engine, table: str) -> list[str]:
     with engine.begin() as conn:
         rows = conn.execute(sql_text(f"SELECT name FROM {table} ORDER BY lower(name)")).fetchall()
     return [r[0] for r in rows]
 
-
 def usage_count(engine: Engine, col: str, name: str) -> int:
     with engine.begin() as conn:
         cnt = conn.execute(sql_text(f"SELECT COUNT(*) FROM vendors WHERE {col} = :n"), {"n": name}).scalar()
     return int(cnt or 0)
-
 
 # -----------------------------
 # CSV Restore helpers (append-only, ID-checked)
@@ -602,12 +589,10 @@ def _get_table_columns(engine: Engine, table: str) -> list[str]:
         res = conn.execute(sql_text(f"SELECT * FROM {table} LIMIT 0"))
         return list(res.keys())
 
-
 def _fetch_existing_ids(engine: Engine, table: str = "vendors") -> set[int]:
     with engine.connect() as conn:
         rows = conn.execute(sql_text(f"SELECT id FROM {table}")).all()
     return {int(r[0]) for r in rows if r[0] is not None}
-
 
 def _prepare_csv_for_append(
     engine: Engine,
@@ -688,7 +673,6 @@ def _prepare_csv_for_append(
 
     return with_id_df, without_id_df, rejected_existing_ids, insertable_cols
 
-
 def _execute_append_only(
     engine: Engine,
     with_id_df: pd.DataFrame,
@@ -716,7 +700,6 @@ def _execute_append_only(
 
     return inserted
 
-
 # -----------------------------
 # UI
 # -----------------------------
@@ -742,6 +725,7 @@ _tabs = st.tabs(
         "Debug",
     ]
 )
+
 # ---- Safe search-blob builder (works across pandas 2.1/2.2/2.3) ----
 def _safe_search_blob(df: pd.DataFrame, columns: list[str]) -> pd.Series:
     use = [c for c in columns if c in df.columns]
@@ -773,70 +757,70 @@ with _tabs[0]:
     # --- Search input at 25% width (table remains full width) ---
     left, right = st.columns([1, 3])
     with left:
-        q = st.text_input(
+        st.text_input(
             "Search",
             placeholder="Search providers… (press Enter)",
             label_visibility="collapsed",
             key="q",
         )
 
-    # Fast local filter using the prebuilt blob (no regex)
-# ---- Resolve current query from session ----
-q = (st.session_state.get("q") or "").strip()
+    # ---- Resolve current query from session ----
+    q = (st.session_state.get("q") or "").strip()
 
-# ---- Reset any edit selection when search changes ----
-_prev_q = st.session_state.get("_prev_q", None)
-if q != (_prev_q or ""):
-    st.session_state["edit_vendor_id"] = None
-st.session_state["_prev_q"] = q
+    # ---- Reset any edit selection when search changes ----
+    _prev_q = st.session_state.get("_prev_q", None)
+    if q != (_prev_q or ""):
+        st.session_state["edit_vendor_id"] = None
+    st.session_state["_prev_q"] = q
 
-# ---- Keep ?q synchronized with session state (guarded; avoids rerun loops) ----
-try:
-    if hasattr(st, "query_params"):
-        existing_q = ""
-        try:
-            existing_q = st.query_params.get("q") or ""
-        except Exception:
+    # ---- Keep ?q synchronized with session state (guarded; avoids rerun loops) ----
+    try:
+        if hasattr(st, "query_params"):
             existing_q = ""
-        if existing_q != q:
-            st.query_params["q"] = q
-except Exception:
-    # Never let param sync crash the app
-    pass
+            try:
+                existing_q = st.query_params.get("q") or ""
+            except Exception:
+                existing_q = ""
+            if existing_q != q:
+                st.query_params["q"] = q
+    except Exception:
+        # Never let param sync crash the app
+        pass
 
-# ---- Lowercased form for filtering ----
-qq = q.lower()
-# ---- Build filtered view (fast substring over prebuilt _blob) ----
-if "_blob" not in df.columns:
-    # Fallback: build a minimal blob on the fly (slower)
-    cols = [c for c in ["category", "service", "business_name", "notes", "keywords"] if c in df.columns]
-    df["_blob"] = df[cols].astype(str).agg(" ".join, axis=1).str.lower()
+    # ---- Build filtered view (fast substring over prebuilt _blob) ----
+    qq = q.lower()
+    if "_blob" not in df.columns:
+        # Fallback: build a minimal blob on the fly (slower)
+        cols = [c for c in ["category", "service", "business_name", "notes", "keywords"] if c in df.columns]
+        df["_blob"] = df[cols].astype(str).agg(" ".join, axis=1).str.lower()
 
-vdf = df
-if qq:
-    vdf = df[df["_blob"].str.contains(qq, na=False)]
-_render = None
+    vdf = df
+    if qq:
+        vdf = df[df["_blob"].str.contains(qq, na=False)]
+    _render = None
 
-# ==== BEGIN: Browse render (safe) ====
-MAX_ROWS = 1000
-if vdf is None or vdf.empty:
-    st.info("No matching providers. Tip: try fewer words.")
-else:
-    _render = vdf.head(MAX_ROWS).copy()
-    # Optional: quiet debug breadcrumb (gated)
-    if os.getenv("ADMIN_SHOW_DEBUG", "").strip() == "1" or st.session_state.get("show_debug"):
-        st.caption(f"Browse — showing {len(_render)}/{len(vdf)} (cap {MAX_ROWS}); total df: {len(df)}")
-    st.dataframe(_render, use_container_width=True)
-# ==== END: Browse render (safe) ====
+    # ==== BEGIN: Browse render (safe) ====
+    MAX_ROWS = 1000
+    if vdf is None or vdf.empty:
+        st.info("No matching providers. Tip: try fewer words.")
+    else:
+        _render = vdf.head(MAX_ROWS).copy()
+        # Optional: quiet debug breadcrumb (gated)
+        if os.getenv("ADMIN_SHOW_DEBUG", "").strip() == "1" or st.session_state.get("show_debug"):
+            st.caption(f"Browse — showing {len(_render)}/{len(vdf)} (cap {MAX_ROWS}); total df: {len(df)}")
+        st.dataframe(_render, use_container_width=True)
+    # ==== END: Browse render (safe) ====
+
     # Optional: CSV download of the currently rendered subset (_render)
     try:
-        ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
-        st.download_button(
-            "Download filtered view (CSV)",
-            data=_render.to_csv(index=False).encode("utf-8"),
-            file_name=f"providers_{ts}.csv",
-            mime="text/csv",
-        )
+        if _render is not None and not _render.empty:
+            ts = datetime.utcnow().strftime("%Y%m%d-%H%M%S")
+            st.download_button(
+                "Download filtered view (CSV)",
+                data=_render.to_csv(index=False).encode("utf-8"),
+                file_name=f"providers_{ts}.csv",
+                mime="text/csv",
+            )
     except Exception:
         # _render only exists when vdf is non-empty; safe to ignore if not defined
         pass
@@ -1084,12 +1068,12 @@ with _tabs[1]:
         # Use separate delete selection (ID-backed similar approach could be added later)
         sel_label_del = st.selectbox(
             "Select provider to delete (type to search)",
-            options=["— Select —"] + [ _fmt_vendor(i) for i in ids ],
+            options=["— Select —"] + [_fmt_vendor(i) for i in ids],
             key="delete_provider_label",
         )
         if sel_label_del != "— Select —":
             # map back to id cheaply
-            rev = { _fmt_vendor(i): i for i in ids }
+            rev = {_fmt_vendor(i): i for i in ids}
             st.session_state["delete_vendor_id"] = int(rev.get(sel_label_del))
         else:
             st.session_state["delete_vendor_id"] = None

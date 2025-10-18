@@ -75,6 +75,32 @@ try:
         os.environ.setdefault(str(k), str(v))
 except Exception:
     pass
+# ==== BEGIN: cached-query DSN helper (for hashing) ====
+def _dsn_for_cache() -> str:
+    """
+    Build a stable DSN string for cache hashing without changing how build_engine() connects.
+    Prefers explicit LIBSQL_URL_FULL / TURSO_DATABASE_URL+TOKEN, otherwise embedded/local.
+    """
+    url_full = (_get_secret("LIBSQL_URL_FULL", "") or "").strip()
+    if url_full.startswith("libsql://"):
+        return f"sqlite+libsql:///?url={url_full}"
+
+    turso_url = (_get_secret("TURSO_DATABASE_URL", "") or "").strip()
+    turso_tok = (_get_secret("TURSO_AUTH_TOKEN", "") or "").strip()
+    if turso_url.startswith("libsql://"):
+        sep = "&" if "?" in turso_url else "?"
+        url = turso_url
+        if "authToken=" not in url and turso_tok:
+            url += f"{sep}authToken={turso_tok}"
+            sep = "&"
+        if "tls=" not in url:
+            url += f"{sep}tls=true"
+        return f"sqlite+libsql:///?url={url}"
+
+    # Fallback to embedded/local file paths used by build_engine()
+    embedded = os.path.abspath(_resolve_str("EMBEDDED_DB_PATH", "vendors-embedded.db") or "vendors-embedded.db")
+    return f"sqlite:///{embedded}"
+# ==== END: cached-query DSN helper ====
 
 # -----------------------------
 # Helpers

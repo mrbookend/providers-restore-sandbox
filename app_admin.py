@@ -27,6 +27,7 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded",
 )
+# ---- No other st.* calls above this line ----
 
 # ---- Stdlib ----
 import os

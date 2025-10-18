@@ -298,7 +298,6 @@ def _queue_svc_reset():
 # -----------------------------
 PAGE_TITLE = _resolve_str("page_title", "Vendors Admin") or "Vendors Admin"
 SIDEBAR_STATE = _resolve_str("sidebar_state", "expanded") or "expanded"
-st.set_page_config(page_title=PAGE_TITLE, layout="wide", initial_sidebar_state=SIDEBAR_STATE)
 
 LEFT_PAD_PX = int(_resolve_str("page_left_padding_px", "40") or "40")
 

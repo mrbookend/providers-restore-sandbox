@@ -72,7 +72,7 @@ if os.getenv("ADMIN_SHOW_STATUS", "0").strip() == "1":
 # =============================
 # Configuration / Constants
 # =============================
-APP_VER = "admin-2025-10-18.3"
+APP_VER = "admin-2025-10-18.4"
 CURRENT_CKW_VER = "ckw-2025-10-16a"  # bump when generator changes
 PAGE_SIZE = 200
 MAX_RENDER_ROWS = 1000

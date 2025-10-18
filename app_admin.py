@@ -905,7 +905,8 @@ def tab_diagnostics(engine: Engine, target_desc: str) -> None:
 # =============================
 
 def _bootstrap_schema(engine: Engine) -> None:
-    """Run one-time schema bootstrap. Use only on an empty DB."
+    """Run one-time schema bootstrap. Use only on an empty DB."""
+
     with engine.begin() as cx:
         cx.execute(sql_text("DELETE FROM sqlite_sequence"))  # noop on libsql
         # We rely on ensure_schema which is idempotent; this is a placeholder.

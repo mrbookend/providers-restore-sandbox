@@ -10,9 +10,19 @@ from datetime import datetime
 from typing import List, Tuple, Dict
 
 import pandas as pd
+# ---- Page config MUST be the first Streamlit command ----
 import streamlit as st
-from sqlalchemy import create_engine, text as sql_text
-from sqlalchemy.engine import Engine
+st.set_page_config(
+    page_title="HCR Providers — Admin",  # use a static default title here
+    page_icon="🛠️",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
+
+# (Safe to import anything else after this)
+import os, re, time, sys, html, json, textwrap
+from datetime import datetime, timedelta, timezone
+from typing import Dict, List, Optional, Tuple
 
 # ---- register libsql dialect (must be AFTER "import streamlit as st") ----
 try:

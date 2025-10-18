@@ -755,10 +755,12 @@ with _tabs[0]:
         st.session_state["edit_vendor_id"] = None
 
     # (temp) quick sanity: expect df>0 and vdf>0 when search empty
+    if os.getenv("ADMIN_SHOW_DEBUG", "").strip() == "1" or st.session_state.get("show_debug"):
     st.caption(
         f"Browse debug — df rows: {len(df)}; filtered rows: {len(vdf)}; "
         f"edit_vendor_id: {st.session_state.get('edit_vendor_id')}"
     )
+
 
     # Read-only table with clickable website links
     st.dataframe(

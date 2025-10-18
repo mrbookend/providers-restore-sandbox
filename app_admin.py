@@ -32,9 +32,20 @@ from sqlalchemy.engine import Engine
 # Register libsql dialect if available (non-fatal if missing for non-turso)
 try:
     import sqlalchemy_libsql as sa_libsql
-    sa_libsql_ver = getattr(sa_libsql, "__version__", "not-installed")
 except Exception:
     sa_libsql = None
+
+# Resolve sqlalchemy-libsql version from installed dist (more reliable than module attr)
+try:
+    from importlib.metadata import version as _pkg_version, PackageNotFoundError
+except Exception:  # very old Pythons only; 3.11 has it
+    _pkg_version = None
+    class PackageNotFoundError(Exception): ...
+try:
+    sa_libsql_ver = _pkg_version("sqlalchemy-libsql") if _pkg_version else (
+        getattr(sa_libsql, "__version__", "not-installed") if sa_libsql else "not-installed"
+    )
+except PackageNotFoundError:
     sa_libsql_ver = "not-installed"
 
 # ---- Optional: dependency banner (OK after page_config) ----

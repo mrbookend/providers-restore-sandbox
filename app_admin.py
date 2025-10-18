@@ -715,6 +715,8 @@ def _safe_search_blob(df: pd.DataFrame, columns: list[str]) -> pd.Series:
     )
     # Join row values with spaces and lowercase
     return tmp.apply(lambda row: " ".join(v for v in row if v), axis=1).str.lower()
+    # --- Load data for Browse Vendors tab ---
+    df = load_df(engine)
 
     # --- Build a lowercase search blob once (guarded) ---
     if "_blob" not in df.columns:

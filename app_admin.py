@@ -54,6 +54,11 @@ st.caption(
     f"sqlalchemy: {sa.__version__} | "
     f"sqlalchemy-libsql: {sa_libsql_ver}"
 )
+# ==== BEGIN: perf constants ====
+PAGE_SIZE  = 200     # rows per page in Browse
+MAX_RENDER = 1000    # final UI safety cap
+MIN_Q_LEN  = 2       # avoid heavy scans on single letters
+# ==== END: perf constants ====
 
 # ---- Session-state safety defaults (defensive) ----
 for _k, _v in {
